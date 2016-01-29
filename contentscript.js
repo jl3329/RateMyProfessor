@@ -17,45 +17,147 @@ function getSelectedText(){
 }
 
 /**
+* Given an array of HTML nodes, a class name, and a div,
+* clears all children of given div, then repopulates it with copies
+* of the nodes in the array while changing the class of each node to newClass
+*/
+function updateDiv(nodeArray, newClass, div){
+	div.innerHTML = ''; //clear old results
+	for (i=0; i<nodeArray.length; i++){
+		var newNode = nodeArray[i].cloneNode(true);
+		newNode.className = newClass;
+		div.appendChild(newNode);
+	}
+}
+
+/**
 * Given an array of HTML elements containing the names of professors,
 * their schools, and a link to their Rate My Professor page,
 * creates a new HTML element on current page showing information in given array
 */
-function showProfessors(array){
-	console.log(array);
-
-	var sel = window.getSelection();
-	var selRect = sel.getRangeAt(0).getBoundingClientRect();
-
+function showProfessors(array, url, pages){
 	var popup = document.createElement('div');
-	popup.setAttribute("id", "RMP_popup");
+	popup.setAttribute("id", "rmp-popup");
 
 	popup.style.height = '300px';
 	popup.style.width = '300px';
 	popup.style.position = 'absolute';
-	popup.style.zIndex = '900000000000'; //Is this necessarry? For now, need this to superimpose on current page
+	popup.style.zIndex = '900000000000'; //Is this necessary? For now, need this to superimpose on current page
+
+	var sel = window.getSelection();
+	var selRect = sel.getRangeAt(0).getBoundingClientRect();
+
 
 	if (selRect.top <= window.innerHeight - selRect.bottom){ //closer to top of window
-		console.log('top');
-		console.log(selRect.bottom);
 		popup.style.top = selRect.bottom + parseInt(window.scrollY, 10) + 'px';
 	}
 	else{ //closer to bottom of window
-		console.log('bottom');
-		console.log(selRect.top);
 		popup.style.top = selRect.top - 300 + parseInt(window.scrollY, 10) + 'px';
 	}
 
 	if (selRect.left <= window.innerWidth - selRect.right){ // closer to left of window
-		console.log('left');
 		popup.style.left = selRect.left + parseInt(window.scrollX, 10) + 'px';
 	}
 	else{ //closer to right of window
-		console.log('right');
 		popup.style.left = selRect.right - 300 + parseInt(window.scrollX, 10) + 'px';
 	}
 
-	
+	if (array.length === 1){ //only one match, display professor's scores
+		var prof = document.createElement('div');
+		prof.setAttribute('id', 'rmp-prof-name');
+		prof.innerHTML = array[0].getElementsByClassName('main')[0].innerHTML;
+		popup.appendChild(prof);
+
+		var deptAndSchool = document.createElement('div');
+		deptAndSchool.setAttribute('id', 'rmp-school-name');
+		deptAndSchool.innerHTML = array[0].getElementsByClassName('sub')[0].innerHTML;
+
+		var url = 'http://www.ratemyprofessors.com'
+			+ array[0].getElementsByTagName('a')[0].getAttribute('href');
+
+		var xmlRequest = new XMLHttpRequest();
+		xmlRequest.onreadystatechange = function(){
+			if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
+				var div = document.createElement('div');
+				div.innerHTML = xmlRequest.responseText;
+
+				var overallScores = Array.prototype.slice.call( //get Nodelist of scores, turn to array
+					div.getElementsByClassName('grade'), 0, 2);  
+				var subscores = Array.prototype.slice.call(
+					div.getElementsByClassName('rating'), 0, 3); 
+				var allScores = overallScores.concat(subscores); //array containing all relevant scores
+				var categories = ['Overall Grade', 'Average Grade Received', 
+					'Helpfulness', 'Clarity', 'Easiness'];
+
+				for (i=0; i<categories.length; i++){ //create divs
+					scoreDiv = document.createElement('div');
+					scoreDiv.className = 'rmp-score-div';
+
+					scoreLabel = document.createElement('span');
+					scoreLabel.innerHTML = categories[i];
+					scoreLabel.className = 'rmp-score-label';
+					scoreDiv.appendChild(scoreLabel);
+
+					score = document.createElement('span');
+					score.innerHTML = allScores[i].innerHTML;
+					score.className = 'rmp-num-score';
+					scoreDiv.appendChild(score);
+
+					popup.appendChild(scoreDiv);				
+				} 
+			}
+		}
+		xmlRequest.open("GET", url, true);
+		xmlRequest.send();
+	}
+	else if (array.length > 1){
+		var wrapperDiv = document.createElement('div');
+		wrapperDiv.className = 'rmp-result-wrapper';
+		popup.appendChild(wrapperDiv);
+
+		updateDiv(array, 'rmp-result', wrapperDiv);
+
+		if (pages.length > 0){ //if there are multiple pages, create button to show next page
+			var currentPage = 0;
+			var lastPage = pages[pages.length-1].innerHTML;
+
+			var nextButton = document.createElement('BUTTON');
+			nextButton.className = 'rmp-button';
+			nextButton.innerHTML = 'NEXT';
+			popup.appendChild(nextButton);
+
+			nextButton.onclick = function(){
+				console.log('clic');
+				currentPage++;
+				if (currentPage === lastPage-1){
+					popup.removeChild(nextButton);
+				}
+				else{
+					var nextPageURL = url + '&max=20&offset=' + currentPage*20;
+					console.log(nextPageURL);
+					xmlRequest = new XMLHttpRequest();
+					xmlRequest.onreadystatechange = function(){
+						if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
+							var div = document.createElement('div');
+							div.innerHTML = xmlRequest.responseText;
+							var listingsArray = div.getElementsByClassName('listing PROFESSOR');
+
+							updateDiv(listingsArray, 'rmp-result', wrapperDiv);
+						}
+					}
+					xmlRequest.open("GET", nextPageURL, true);
+					xmlRequest.send();
+				}
+			}
+			
+		}
+	}
+	else{ //no matches
+		var notificationDiv = document.createElement('div');
+		notificationDiv.setAttribute('id', 'rmp-notification');
+		notificationDiv.innerHTML = 'Sorry, no professors found.';
+	}
+
 	document.body.appendChild(popup);
 }
 
@@ -75,26 +177,25 @@ function getProfessors(name, school, department){
 
 	// For case 4 and 5 (if there is an initial),
 	// We search the last name, then filter by initial
-	var xmlRequest = new XMLHttpRequest();
-	xmlRequest.onreadystatechange = function(){
-		if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
-			console.log(xmlRequest.responseText);
-			var div = document.createElement('div');
-			div.innerHTML = xmlRequest.responseText;
-			var listings = div.getElementsByClassName('listing PROFESSOR');
-
-
-		}
-	}
 	if (school === undefined) school = '';
 	if (department === undefined) department = '';
 
 	url = 'http://www.ratemyprofessors.com/search.jsp?queryBy=teacherName&queryoption=HEADER&facetSearch=true'
-		+ '&query=' + name;
+		+ '&query=' + name
 		+ '&schoolName=' + school
 		+ '&dept=' + department;
+	var xmlRequest = new XMLHttpRequest();
+	xmlRequest.onreadystatechange = function(){
+		if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
+			var div = document.createElement('div');
+			div.innerHTML = xmlRequest.responseText;
+			var listingsArray = div.getElementsByClassName('listing PROFESSOR');
+			var pageArray = div.getElementsByClassName('step');
+			showProfessors(listingsArray, url, pageArray);
+		}
+	}
+	
 	xmlRequest.open("GET", url, true);
 	xmlRequest.send();
 }
-
-showProfessors('hi');
+getProfessors('alex');
