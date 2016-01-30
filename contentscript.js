@@ -31,6 +31,17 @@ function updateDiv(nodeArray, newClass, div){
 }
 
 /**
+* Given an array of HTML nodes, changes all the relative hrefs
+* in the nodes to absolute hrefs, with the given base url
+*/
+function relativeURLtoAbsoluteURL(nodeArray, baseURL){
+	for (i=0; i<nodeArray.length; i++){
+		nodeArray[i].getElementsByTagName('a')[0].href = 
+			baseURL + nodeArray[i].getElementsByTagName('a')[0].getAttribute('href');
+	}
+}
+
+/**
 * Given an array of HTML elements containing the names of professors,
 * their schools, and a link to their Rate My Professor page,
 * creates a new HTML element on current page showing information in given array
@@ -115,11 +126,49 @@ function showProfessors(array, url, pages){
 		wrapperDiv.className = 'rmp-result-wrapper';
 		popup.appendChild(wrapperDiv);
 
+		relativeURLtoAbsoluteURL(array, 'http://www.ratemyprofessors.com');
 		updateDiv(array, 'rmp-result', wrapperDiv);
 
 		if (pages.length > 0){ //if there are multiple pages, create button to show next page
 			var currentPage = 0;
 			var lastPage = pages[pages.length-1].innerHTML;
+
+			var prevButton = document.createElement('BUTTON');
+			prevButton.className = 'rmp-button';
+			prevButton.innerHTML = 'PREV';
+			prevButton.style.visibility = 'hidden'; //on first page, button is hidden
+			popup.appendChild(prevButton);
+
+			prevButton.onclick = function(){
+				nextButton.style.visibility = 'visible';
+				currentPage--;
+				pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
+				if (currentPage === 0){
+					prevButton.style.visibility = 'visible';
+				}
+
+				var prevPageURL = url + '&max=20&offset=' + currentPage*20;
+				console.log(prevPageURL);
+				var xmlRequest = new XMLHttpRequest();
+				xmlRequest.onreadystatechange = function(){
+					if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
+						var div = document.createElement('div');
+						div.innerHTML = xmlRequest.responseText;
+						var listingsArray = div.getElementsByClassName('listing PROFESSOR');
+
+						relativeURLtoAbsoluteURL(listingsArray, 'http://www.ratemyprofessors.com');
+						updateDiv(listingsArray, 'rmp-result', wrapperDiv);
+					}
+				}
+				xmlRequest.open("GET", prevPageURL, true);
+				xmlRequest.send();
+				
+			}
+
+			var pageCount = document.createElement('div');
+			pageCount.className = 'rmp-page-count';
+			pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
+			popup.appendChild(pageCount);
 
 			var nextButton = document.createElement('BUTTON');
 			nextButton.className = 'rmp-button';
@@ -127,35 +176,36 @@ function showProfessors(array, url, pages){
 			popup.appendChild(nextButton);
 
 			nextButton.onclick = function(){
-				console.log('clic');
+				prevButton.style.visibility = 'visible';
 				currentPage++;
+				pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
 				if (currentPage === lastPage-1){
-					popup.removeChild(nextButton);
+					nextButton.style.visibility = 'hidden';
 				}
-				else{
-					var nextPageURL = url + '&max=20&offset=' + currentPage*20;
-					console.log(nextPageURL);
-					xmlRequest = new XMLHttpRequest();
-					xmlRequest.onreadystatechange = function(){
-						if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
-							var div = document.createElement('div');
-							div.innerHTML = xmlRequest.responseText;
-							var listingsArray = div.getElementsByClassName('listing PROFESSOR');
+				
+				var nextPageURL = url + '&max=20&offset=' + currentPage*20;
+				console.log(nextPageURL);
+				var xmlRequest = new XMLHttpRequest();
+				xmlRequest.onreadystatechange = function(){
+					if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
+						var div = document.createElement('div');
+						div.innerHTML = xmlRequest.responseText;
+						var listingsArray = div.getElementsByClassName('listing PROFESSOR');
 
-							updateDiv(listingsArray, 'rmp-result', wrapperDiv);
-						}
+						relativeURLtoAbsoluteURL(listingsArray, 'http://www.ratemyprofessors.com');
+						updateDiv(listingsArray, 'rmp-result', wrapperDiv);
 					}
-					xmlRequest.open("GET", nextPageURL, true);
-					xmlRequest.send();
 				}
+				xmlRequest.open("GET", nextPageURL, true);
+				xmlRequest.send();
 			}
-			
 		}
 	}
 	else{ //no matches
 		var notificationDiv = document.createElement('div');
 		notificationDiv.setAttribute('id', 'rmp-notification');
 		notificationDiv.innerHTML = 'Sorry, no professors found.';
+		popup.appendChild(notificationDiv);
 	}
 
 	document.body.appendChild(popup);
@@ -184,6 +234,7 @@ function getProfessors(name, school, department){
 		+ '&query=' + name
 		+ '&schoolName=' + school
 		+ '&dept=' + department;
+	console.log(url);
 	var xmlRequest = new XMLHttpRequest();
 	xmlRequest.onreadystatechange = function(){
 		if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
