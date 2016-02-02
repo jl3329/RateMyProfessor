@@ -1,0 +1,41 @@
+body{
+	margin:0;
+}
+.menu{
+	width: 300px;
+	height:200px;
+	background-color: #f8f8f8;
+}
+
+.menu .title{
+	text-align: center;
+	font-size: 20px;
+}
+
+.menu input[type="text"]{
+	text-align: left;
+	height: 20px;
+	padding:5px;
+	margin: 5px;
+}
+
+#rmp-popup{
+	background-color: #f8f8f8;
+	position: absolute;
+	z-index: 900000000000;
+	border:5px;
+	border-style:solid;
+	border-color:orange;
+	width: 300px;
+}
+
+#rmp-notification{
+	text-align: center;
+	font-size: 20px;
+	padding-top: 40px;
+	padding-bottom: 40px;
+}
+
+#rmp-popup .listing-cat{
+	display:none;
+}
