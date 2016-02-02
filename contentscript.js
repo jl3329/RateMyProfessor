@@ -342,5 +342,15 @@ function search(){
 	var professor = parseName(getSelectedText());
 	getProfessors(professor);
 }
-search();
-//parseName('Maxwell, B');
+
+chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
+	console.log('message received');
+	query = 'http://www.ratemyprofessors.com/search.jsp?queryBy=teacherName&queryoption=HEADER&facetSearch=true'
+	+ '&query=' + parseName(getSelectedText())
+	+ '&schoolName=' + request.school
+	+ '&dept=' + request.department;
+
+	chrome.runtime.sendMessage({url: query}, function(response) {
+		console.log('response received');
+	});
+});
