@@ -7,7 +7,6 @@ function popup_search() {
 	}); 
 
 	chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-		console.log('message');
 		chrome.tabs.sendMessage(tabs[0].id, 
 			{school: document.querySelectorAll('input[type="text"]')[0].value,
 			department: document.querySelectorAll('input[type="text"]')[1].value});

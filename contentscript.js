@@ -1,12 +1,3 @@
-//User flow:
-// 1. (Optional) Set school (maybe department)
-// 2. Highlight text
-// 3. Select professor
-// 4. View scores
-// 5. (Optional) Create new window to continue viewing scores 
-
-
-
 /**
 * Gets the text highlighted by user and returns it as a string
 */
@@ -38,7 +29,6 @@ function getSelectedText(){
 function parseName(name){
 	var comma = name.indexOf(',');
 	if (comma !== -1){ //comma in input, must be parsed
-		//console.log('has comma');
 		var beforeComma = name.slice(0, comma);
 		beforeComma = beforeComma.replace(/\s+/g,' ').trim();
 		var beforeArray = beforeComma.split(' ');
@@ -46,9 +36,6 @@ function parseName(name){
 		var afterComma = name.slice(comma+1);
 		afterComma = afterComma.replace(/\s+/g,' ').trim();
 		var afterArray = afterComma.split(' ');
-
-		//console.log(beforeArray);
-		//console.log(afterArray);
 
 		var newName
 		if (beforeArray.length === afterArray.length){ //No middle initial or name
@@ -73,7 +60,6 @@ function parseName(name){
 		}
 	}	
 	else{  //No comma
-		//console.log('no comma');
 		//replace all sequential spaces with single space
 		//also removes spaces at ends of name
 		var newName = name.replace(/\s+/g,' ').trim();
@@ -114,13 +100,14 @@ function relativeURLtoAbsoluteURL(nodeArray, baseURL){
 }
 
 /**
-* Given an array of HTML elements containing the names of professors,
-* their schools, and a link to their Rate My Professor page,
-* creates a new HTML element on current page showing information in given array
+* Given an id, create a div positioned below the user's selected text
+* If selected text is closer to the left side of the page, div will lineup with
+* the left edge of the selected text and vice-versa
+* Returns created popup.
 */
-function showProfessors(array, url, pages){
+function createPopup(id){
 	var popup = document.createElement('div');
-	popup.setAttribute("id", "rmp-popup");
+	popup.setAttribute("id", id);
 
 	//get bounding box of selected text and position popup
 	var sel = window.getSelection();
@@ -137,25 +124,41 @@ function showProfessors(array, url, pages){
 		popup.style.right = window.innerWidth - selRect.right
 			+ parseInt(window.scrollX, 10) + 'px';
 	}
+	document.body.appendChild(popup);
+	return popup;
+}
 
-	if (array.length === 1){ //only one match, display professor's scores
-		var prof = document.createElement('div');
-		prof.setAttribute('id', 'rmp-prof-name');
-		prof.innerHTML = array[0].getElementsByClassName('main')[0].innerHTML;
-		popup.appendChild(prof);
+chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
+	url = 'http://www.ratemyprofessors.com/search.jsp?queryBy=teacherName&queryoption=HEADER&facetSearch=true'
+	+ '&query=' + parseName(getSelectedText())
+	+ '&schoolName=' + request.school
+	+ '&dept=' + request.department;
 
-		var deptAndSchool = document.createElement('div');
-		deptAndSchool.setAttribute('id', 'rmp-school-name');
-		deptAndSchool.innerHTML = array[0].getElementsByClassName('sub')[0].innerHTML;
+	// response parameters:
+	//source: responseText of XML HTTP Request to the given url
+	chrome.runtime.sendMessage({query: url}, function(response) {
+		var popup = createPopup('rmp-popup');
 
-		var url = 'http://www.ratemyprofessors.com'
-			+ array[0].getElementsByTagName('a')[0].getAttribute('href');
+		var div = document.createElement('div'); //create fake div to search for HTML nodes
+		div.innerHTML = response.source;
+		var resultsArray = div.getElementsByClassName('listing PROFESSOR');
 
-		var xmlRequest = new XMLHttpRequest();
-		xmlRequest.onreadystatechange = function(){
-			if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
+		if (resultsArray.length === 1){ //only one match, display professor's scores
+			var prof = document.createElement('div');
+			prof.setAttribute('id', 'rmp-prof-name');
+			prof.innerHTML = resultsArray[0].getElementsByClassName('main')[0].innerHTML;
+			popup.appendChild(prof);
+
+			var deptAndSchool = document.createElement('div');
+			deptAndSchool.setAttribute('id', 'rmp-school-name');
+			deptAndSchool.innerHTML = resultsArray[0].getElementsByClassName('sub')[0].innerHTML;
+
+			var profUrl = 'http://www.ratemyprofessors.com'
+				+ resultsArray[0].getElementsByTagName('a')[0].getAttribute('href');
+
+			chrome.runtime.sendMessage({query:profUrl}, function(response){
 				var div = document.createElement('div');
-				div.innerHTML = xmlRequest.responseText;
+				div.innerHTML = response.source;
 				if (div.getElementsByClassName('dosanddonts').length === 0){ //dosanddonts class only present if professor has no ratings
 					var overallScores = Array.prototype.slice.call( //get Nodelist of scores, turn to array
 						div.getElementsByClassName('grade'), 0, 2);  
@@ -188,169 +191,79 @@ function showProfessors(array, url, pages){
 					notificationDiv.innerHTML = 'Sorry, this professor has no ratings yet.';
 					popup.appendChild(notificationDiv);
 				}
-			}
+			});
 		}
-		xmlRequest.open("GET", url, true);
-		xmlRequest.send();
-	}
-	else if (array.length > 1){
-		var wrapperDiv = document.createElement('div');
-		wrapperDiv.className = 'rmp-result-wrapper';
-		popup.appendChild(wrapperDiv);
+		else if (resultsArray.length>1){ //multiple results
+			var wrapperDiv = document.createElement('div');
+			wrapperDiv.className = 'rmp-result-wrapper';
+			popup.appendChild(wrapperDiv);
 
-		relativeURLtoAbsoluteURL(array, 'http://www.ratemyprofessors.com');
-		updateDiv(array, 'rmp-result', wrapperDiv);
+			relativeURLtoAbsoluteURL(resultsArray, 'http://www.ratemyprofessors.com');
+			updateDiv(resultsArray, 'rmp-result', wrapperDiv);
+			var pageArray = div.getElementsByClassName('step'); //empty means only 1 page of results
 
-		if (pages.length > 0){ //if there are multiple pages, create button to show next page
-			var currentPage = 0;
-			var lastPage = pages[pages.length-1].innerHTML;
+			if (pageArray.length>0){ //create buttons to navigate thru results
+				var currentPage = 0;
+				var lastPage = pageArray[pageArray.length-1].innerHTML;
 
-			var prevButton = document.createElement('BUTTON');
-			prevButton.className = 'rmp-button';
-			prevButton.innerHTML = 'PREV';
-			prevButton.style.visibility = 'hidden'; //on first page, button is hidden
-			popup.appendChild(prevButton);
+				var prevButton = document.createElement('BUTTON');
+				prevButton.className = 'rmp-button';
+				prevButton.innerHTML = 'PREV';
+				prevButton.style.visibility = 'hidden'; //on first page, button is hidden
+				popup.appendChild(prevButton);
 
-			prevButton.onclick = function(){
-				nextButton.style.visibility = 'visible';
-				currentPage--;
+				var pageCount = document.createElement('div');
+				pageCount.className = 'rmp-page-count';
 				pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
-				if (currentPage === 0){
+				popup.appendChild(pageCount);
+
+				var nextButton = document.createElement('BUTTON');
+				nextButton.className = 'rmp-button';
+				nextButton.innerHTML = 'NEXT';
+				popup.appendChild(nextButton);
+
+				var changePage = function(){
+					pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
+					if (currentPage === lastPage-1){nextButton.style.visibility = 'hidden';}
+					if (currentPage === 0){prevButton.style.visibility = 'hidden';}
+					
+					var pageURL = url + '&max=20&offset=' + currentPage*20;
+					chrome.runtime.sendMessage({query:pageURL}, function(response){
+						var div = document.createElement('div');
+						div.innerHTML = response.source;
+						var resultsArray = div.getElementsByClassName('listing PROFESSOR');
+
+						relativeURLtoAbsoluteURL(resultsArray, 'http://www.ratemyprofessors.com');
+						updateDiv(resultsArray, 'rmp-result', wrapperDiv);
+					});
+				}
+
+				nextButton.onclick = function(){
 					prevButton.style.visibility = 'visible';
+					currentPage++;
+					changePage();
 				}
 
-				var prevPageURL = url + '&max=20&offset=' + currentPage*20;
-				var xmlRequest = new XMLHttpRequest();
-				xmlRequest.onreadystatechange = function(){
-					if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
-						var div = document.createElement('div');
-						div.innerHTML = xmlRequest.responseText;
-						var listingsArray = div.getElementsByClassName('listing PROFESSOR');
-
-						relativeURLtoAbsoluteURL(listingsArray, 'http://www.ratemyprofessors.com');
-						updateDiv(listingsArray, 'rmp-result', wrapperDiv);
-					}
+				prevButton.onclick = function(){
+					nextButton.style.visibility = 'visible';
+					currentPage--;
+					changePage();
 				}
-				xmlRequest.open("GET", prevPageURL, true);
-				xmlRequest.send();
-				
-			}
-
-			var pageCount = document.createElement('div');
-			pageCount.className = 'rmp-page-count';
-			pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
-			popup.appendChild(pageCount);
-
-			var nextButton = document.createElement('BUTTON');
-			nextButton.className = 'rmp-button';
-			nextButton.innerHTML = 'NEXT';
-			popup.appendChild(nextButton);
-
-			nextButton.onclick = function(){
-				prevButton.style.visibility = 'visible';
-				currentPage++;
-				pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
-				if (currentPage === lastPage-1){
-					nextButton.style.visibility = 'hidden';
-				}
-				
-				var nextPageURL = url + '&max=20&offset=' + currentPage*20;
-				var xmlRequest = new XMLHttpRequest();
-				xmlRequest.onreadystatechange = function(){
-					if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
-						var div = document.createElement('div');
-						div.innerHTML = xmlRequest.responseText;
-						var listingsArray = div.getElementsByClassName('listing PROFESSOR');
-
-						relativeURLtoAbsoluteURL(listingsArray, 'http://www.ratemyprofessors.com');
-						updateDiv(listingsArray, 'rmp-result', wrapperDiv);
-					}
-				}
-				xmlRequest.open("GET", nextPageURL, true);
-				xmlRequest.send();
 			}
 		}
-	}
-	else{ //no matches
-		var notificationDiv = document.createElement('div');
-		notificationDiv.setAttribute('id', 'rmp-notification');
-		notificationDiv.innerHTML = 'Sorry, no professors found.';
-		popup.appendChild(notificationDiv);
-	}
-
-	document.body.appendChild(popup);
-
-	var remove = function (event){
-		if (event.target != popup && event.target.parentNode != popup){
-			document.body.removeChild(popup);
-			window.removeEventListener('mouseup', remove);
+		else{ //no matches
+			var notificationDiv = document.createElement('div');
+			notificationDiv.setAttribute('id', 'rmp-notification');
+			notificationDiv.innerHTML = 'Sorry, no professors found.';
+			popup.appendChild(notificationDiv);
 		}
-	}	
-	window.addEventListener('mouseup', remove);
-}
 
-/**
-* Returns: Array of all professors that match given parameters and
-* urls to their respective Rate My Professors page
-*
-* Supports following formats for name:
-* 	1. First name Last name (Joe Smith)
-*	2. Last name, First name (Smith, Joe)
-*	3. First name Middle name Last name (Joe Tom Smith)
-*	4. Last name, First name Middle name (Smith, Joe Tom)
-*
-* Searching by middle initial is not supported,
-* and only the first and last name will be searched for.
-* 	5. First name Middle initial Last name (Joe T Smith)
-*	6. Last name, First name Middle initial (Smith, Joe T)
-*
-* Searching by last initial is also not supported, 
-* and only the last name will be searched for.
-*	7. Last name only (Smith)
-*	8. First initial Last name (J Smith)
-*	9. Last name, First initial (Smith, J)
-*	
-*/
-function getProfessors(name, school, department){
-	// For case 1-3, we can just search normally
-
-	// For case 4 and 5 (if there is an initial),
-	// We search the last name, then filter by initial
-	if (school === undefined) school = '';
-	if (department === undefined) department = '';
-
-	url = 'http://www.ratemyprofessors.com/search.jsp?queryBy=teacherName&queryoption=HEADER&facetSearch=true'
-		+ '&query=' + name
-		+ '&schoolName=' + school
-		+ '&dept=' + department;
-	var xmlRequest = new XMLHttpRequest();
-	xmlRequest.onreadystatechange = function(){
-		if (xmlRequest.readyState == 4 && xmlRequest.status == 200){
-			var div = document.createElement('div');
-			div.innerHTML = xmlRequest.responseText;
-			var listingsArray = div.getElementsByClassName('listing PROFESSOR');
-			var pageArray = div.getElementsByClassName('step');
-			showProfessors(listingsArray, url, pageArray);
-		}
-	}
-	
-	xmlRequest.open("GET", url, true);
-	xmlRequest.send();
-}
-
-function search(){
-	var professor = parseName(getSelectedText());
-	getProfessors(professor);
-}
-
-chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
-	console.log('message received');
-	query = 'http://www.ratemyprofessors.com/search.jsp?queryBy=teacherName&queryoption=HEADER&facetSearch=true'
-	+ '&query=' + parseName(getSelectedText())
-	+ '&schoolName=' + request.school
-	+ '&dept=' + request.department;
-
-	chrome.runtime.sendMessage({url: query}, function(response) {
-		console.log('response received');
+		var remove = function (event){ //remove popup if user clicks outside it
+			if (event.target != popup && event.target.parentNode != popup){
+				document.body.removeChild(popup);
+				window.removeEventListener('mouseup', remove);
+			}
+		}	
+		window.addEventListener('mouseup', remove);
 	});
 });
