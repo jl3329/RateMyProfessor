@@ -6,7 +6,8 @@
  -->
 <html>
   <head>
-    <title>Getting Started Extension's Popup</title>
+    <title>Rate My Professor Chrome Extension's Popup</title>
+    <link rel="stylesheet" href="stylesheet.css">
     <style>
       body {
         font-family: "Segoe UI", "Lucida Grande", Tahoma, sans-serif;
@@ -27,9 +28,17 @@
       -
       - [1]: https://developer.chrome.com/extensions/contentSecurityPolicy
      -->
-    <script src="popup.js"></script>
   </head>
   <body>
+    <div class="menu">
+      <div class="title">Rate My Professor</div>
+        <form class="rmp-form">
+          <input type="text" name="school" placeholder="School" size="35"><br>
+          <input type="text" name="dept" placeholder="Department" size="35"><br>
+          <input type="button" value="Search" id="rmp-search"><br>
+        </form>
+    </div>
+    <script src="popup.js"></script>
   </body>
 </html>
 
