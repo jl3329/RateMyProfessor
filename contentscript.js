@@ -14,20 +14,22 @@ chrome.runtime.onMessage.addListener( function showPopup(request, sender, sendRe
 		var resultsArray = div.getElementsByClassName('listing PROFESSOR');
 
 		if (resultsArray.length === 1){ //only one match, display professor's scores
-			var prof = document.createElement('div');
+			popup.style.width = '300px';
+
+			var prof = document.createElement('div'); //get name
 			prof.setAttribute('id', 'rmp-prof-name');
 			prof.innerHTML = resultsArray[0].getElementsByClassName('main')[0].innerHTML;
 			popup.appendChild(prof);
 
-			var deptAndSchool = document.createElement('div');
+			var deptAndSchool = document.createElement('div'); // get school
 			deptAndSchool.setAttribute('id', 'rmp-school-name');
 			deptAndSchool.innerHTML = resultsArray[0].getElementsByClassName('sub')[0].innerHTML;
 
-			var profUrl = 'http://www.ratemyprofessors.com'
+			var profUrl = 'http://www.ratemyprofessors.com' //get url to perform another XHR request and get scores
 				+ resultsArray[0].getElementsByTagName('a')[0].getAttribute('href');
 
 			chrome.runtime.sendMessage({query:profUrl}, function(response){
-				var div = document.createElement('div');
+				var div = document.createElement('div'); //create another fake div and search
 				div.innerHTML = response.source;
 				if (div.getElementsByClassName('dosanddonts').length === 0){ //dosanddonts class only present if professor has no ratings
 					var overallScores = Array.prototype.slice.call( //get Nodelist of scores, turn to array
@@ -35,7 +37,7 @@ chrome.runtime.onMessage.addListener( function showPopup(request, sender, sendRe
 					var subscores = Array.prototype.slice.call(
 						div.getElementsByClassName('rating'), 0, 3); 
 					var allScores = overallScores.concat(subscores); //array containing all relevant scores
-					var categories = ['Overall Grade', 'Average Grade Received', 
+					var categories = ['Overall Score', 'Average Grade', 
 						'Helpfulness', 'Clarity', 'Easiness'];
 
 					for (i=0; i<categories.length; i++){ //create divs
@@ -64,6 +66,7 @@ chrome.runtime.onMessage.addListener( function showPopup(request, sender, sendRe
 			});
 		}
 		else if (resultsArray.length>1){ //multiple results
+			popup.style.width = '500px';
 			var wrapperDiv = document.createElement('div');
 			wrapperDiv.className = 'rmp-result-wrapper';
 			popup.appendChild(wrapperDiv);
@@ -76,30 +79,34 @@ chrome.runtime.onMessage.addListener( function showPopup(request, sender, sendRe
 				var currentPage = 0;
 				var lastPage = pageArray[pageArray.length-1].innerHTML;
 
+				var navigationDiv = document.createElement('div');
+				navigationDiv.className = 'rmp-navigation';
+				popup.appendChild(navigationDiv);
+
 				var prevButton = document.createElement('BUTTON');
 				prevButton.className = 'rmp-button';
 				prevButton.innerHTML = 'PREV';
 				prevButton.style.visibility = 'hidden'; //on first page, button is hidden
-				popup.appendChild(prevButton);
-
-				var pageCount = document.createElement('div');
-				pageCount.className = 'rmp-page-count';
-				pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
-				popup.appendChild(pageCount);
+				navigationDiv.appendChild(prevButton);
 
 				var nextButton = document.createElement('BUTTON');
 				nextButton.className = 'rmp-button';
 				nextButton.innerHTML = 'NEXT';
-				popup.appendChild(nextButton);
+				navigationDiv.appendChild(nextButton);
+
+				var pageCount = document.createElement('div');
+				pageCount.className = 'rmp-page-count';
+				pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
+				navigationDiv.appendChild(pageCount);
 
 				var changePage = function(){
 					pageCount.innerHTML = 'Page ' + (currentPage+1) + ' of '+ lastPage;
 					if (currentPage === lastPage-1){nextButton.style.visibility = 'hidden';}
 					if (currentPage === 0){prevButton.style.visibility = 'hidden';}
 					
-					var pageURL = url + '&max=20&offset=' + currentPage*20;
+					var pageURL = url + '&max=20&offset=' + currentPage*20; //url to use in XHR to get next page of results
 					chrome.runtime.sendMessage({query:pageURL}, function(response){
-						var div = document.createElement('div');
+						var div = document.createElement('div'); //create fake div, search through
 						div.innerHTML = response.source;
 						var resultsArray = div.getElementsByClassName('listing PROFESSOR');
 
@@ -122,6 +129,7 @@ chrome.runtime.onMessage.addListener( function showPopup(request, sender, sendRe
 			}
 		}
 		else{ //no matches
+			popup.style.width = '300px';
 			var notificationDiv = document.createElement('div');
 			notificationDiv.setAttribute('id', 'rmp-notification');
 			notificationDiv.innerHTML = 'Sorry, no professors found.';
@@ -129,13 +137,13 @@ chrome.runtime.onMessage.addListener( function showPopup(request, sender, sendRe
 		}
 
 		var remove = function (event){ //remove popup if user clicks outside it
-			if (event.target != popup && event.target.parentNode != popup){
+			if (!popup.contains(event.target)){
 				document.body.removeChild(popup);
 				window.removeEventListener('mouseup', remove);
 			}
 		}	
 		window.addEventListener('mouseup', remove);
-		chrome.runtime.onMessage.removeListener(showPopup);
+		chrome.runtime.onMessage.removeListener(showPopup); //prevents multiple instances of event listener being added
 	});
 });
 
@@ -158,14 +166,14 @@ function getSelectedText(){
 *
 * Given a full name and middle initial, returns the full name in
 * First name Last name format
-*	5. First name Middle initial Last name (Joe T Smith)
-*	6. Last name, First name Middle initial (Smith, Joe T)
+*	5. First name Middle initial Last name (Joe T Smith) or (Joe T. Smith)
+*	6. Last name, First name Middle initial (Smith, Joe T) or (Smith, Joe T.)
 * 
 * Given a last name (and first initial) in one of the following formats, 
 * returns the last name.
 *	7. Last name only (Smith)
-*	8. First initial Last name (J Smith)
-*	9. Last name, First initial (Smith, J)
+*	8. First initial Last name (J Smith) or (J. Smith)
+*	9. Last name, First initial (Smith, J) or (Smith, J.)
 */
 function parseName(name){
 	var comma = name.indexOf(',');
@@ -184,7 +192,7 @@ function parseName(name){
 			else {newName = afterArray[0] + ' ' + beforeArray[0];} //Full first name
 		}
 		else if (beforeArray.length > afterArray.length){ //Middle initial or name before comma
-			if (beforeArray[0].length === 1){ //middle initial
+			if (beforeArray[0].length === 1 || beforeArray[0].indexOf('.') !== -1){ //middle initial
 				newName = afterArray[0]+' '+beforeArray[1];
 			}
 			else{ //middle name
@@ -192,7 +200,7 @@ function parseName(name){
 			}
 		}
 		else{ //Middle initial or name after comma 
-			if (afterArray[1].length === 1){ //Middle initial
+			if (afterArray[1].length === 1 || afterArray[1].indexOf('.') !== -1){ //Middle initial
 				newName = afterArray[0]+' '+beforeArray[0];
 			}
 			else{ //Middle name
@@ -205,10 +213,10 @@ function parseName(name){
 		//also removes spaces at ends of name
 		var newName = name.replace(/\s+/g,' ').trim();
 		nameArray = newName.split(' ');
-		if (nameArray.length === 3 && nameArray[1].length === 1){ //middle initial exists
+		if (nameArray.length === 3 && (nameArray[1].length === 1 || nameArray[1].indexOf('.') !== -1)){ //middle initial exists
 			newName = nameArray[0] + ' ' + nameArray[2];
 		}
-		else if (nameArray[0].length === 1){ //first initial only
+		else if (nameArray[0].length === 1 || nameArray[0].indexOf('.') !== -1){ //first initial only
 			newName = nameArray[1];
 		}
 	}
@@ -231,12 +239,14 @@ function updateDiv(nodeArray, newClass, div){
 
 /**
 * Given an array of HTML nodes, changes all the relative hrefs
-* in the nodes to absolute hrefs, with the given base url
+* in the nodes to absolute hrefs with the given base url
+* and sets each href's target to blank so they open in new tabs.
 */
 function relativeURLtoAbsoluteURL(nodeArray, baseURL){
 	for (i=0; i<nodeArray.length; i++){
 		nodeArray[i].getElementsByTagName('a')[0].href =
 			baseURL + nodeArray[i].getElementsByTagName('a')[0].getAttribute('href');
+		nodeArray[i].getElementsByTagName('a')[0].target = '_blank';
 	}
 }
 
